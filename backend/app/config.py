@@ -25,7 +25,13 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+        import os
+        origins = [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+        f_port = os.getenv("FRONTEND_PORT")
+        if f_port:
+            origins.extend([f"http://localhost:{f_port}", f"http://127.0.0.1:{f_port}"])
+        return list(set(origins))
+
 
     class Config:
         case_sensitive = False

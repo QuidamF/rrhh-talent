@@ -114,9 +114,12 @@ async def add_security_headers(request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     # Permitir que el frontend (puerto 5173 o dominios CORS configurados) pueda embeber el visor iframe de PDFs
-    allowed_frame_ancestors = " 'self' http://localhost:5173 http://127.0.0.1:5173 http://localhost:3000"
+    f_port = os.getenv("FRONTEND_PORT", "5173")
+    origins_str = " ".join(settings.allowed_origins_list)
+    allowed_frame_ancestors = f" 'self' http://localhost:{f_port} http://127.0.0.1:{f_port} {origins_str}"
     response.headers["Content-Security-Policy"] = f"frame-ancestors{allowed_frame_ancestors};"
-    # Eliminar o no forzar X-Frame-Options estricto para no colisionar con CSP frame-ancestors en orígenes cruzados (5173 vs 8000)
+    # Eliminar o no forzar X-Frame-Options estricto para no colisionar con CSP frame-ancestors en orígenes cruzados
+
     if "X-Frame-Options" in response.headers:
         del response.headers["X-Frame-Options"]
     response.headers["X-XSS-Protection"] = "1; mode=block"

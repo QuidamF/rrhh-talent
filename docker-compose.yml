@@ -37,6 +37,8 @@ services:
       - ENABLE_AT_REST_ENCRYPTION=${ENABLE_AT_REST_ENCRYPTION:-true}
       - ID_DOCUMENT_RETENTION_HOURS=${ID_DOCUMENT_RETENTION_HOURS:-24}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
+      - FRONTEND_PORT=${FRONTEND_PORT:-5173}
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
