@@ -5,8 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: rh_backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
+
       - ./backend:/app
       - rh_data:/app/data
       - rh_storage:/app/storage
@@ -48,8 +49,9 @@ services:
       dockerfile: Dockerfile
     container_name: rh_frontend
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
     volumes:
+
       - ./frontend:/app
       - /app/node_modules
     environment:
