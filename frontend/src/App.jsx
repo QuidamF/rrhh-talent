@@ -67,13 +67,15 @@ const getApiUrl = () => {
     }
     return envUrl.replace(/\/+$/, '');
   }
+  const backendPort = (import.meta.env.VITE_BACKEND_PORT || '8001').trim();
   if (typeof window !== 'undefined' && window.location) {
     const protocol = window.location.protocol || 'http:';
     const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:8000`;
+    return `${protocol}//${hostname}:${backendPort}`;
   }
-  return 'http://localhost:8000';
+  return `http://localhost:${backendPort}`;
 };
+
 
 const API_URL = getApiUrl();
 console.log("Octopy Talento API Conectada a:", API_URL);

@@ -58,7 +58,9 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=${VITE_API_URL:-}
+      - VITE_BACKEND_PORT=${BACKEND_PORT:-8001}
       - VITE_HMR_CLIENT_PORT=${VITE_HMR_CLIENT_PORT:-}
+
     depends_on:
       - backend
     restart: unless-stopped
