@@ -302,9 +302,23 @@ def purge_system_complete(db: Session, seed_sample_vacancies: bool = True, reaso
             min_age=22,
             max_age=50
         )
-        db.add_all([v1, v2])
+        v3 = models.Vacancy(
+            title="Programa Semillero de Talento - Becarios y Prácticas Multidisciplinarias",
+            description="Convocatoria abierta para estudiantes de últimos semestres y recién egresados interesados en integrarse a proyectos de tecnología, robótica, operaciones y negocios en Octopy. Se asignará a los talentos seleccionados a uno de nuestros 4 ejes según su perfil: 1) Ingeniería y Software (Sistemas, Mecatrónica, Electrónica, Mecánica), 2) Negocios y Comercial (Ventas B2B, Prospección, Cuentas Clave), 3) Creativo y Marketing (Diseño Gráfico, UI/UX, Contenido, Redes), o 4) Administración y Operaciones (Gestión de Proyectos, Finanzas, RH).",
+            requirements="Estudiante activo (últimos semestres) o recién egresado de Ingeniería, Licenciatura o Carrera Técnica afín a Sistemas, Mecatrónica, Electrónica, Mecánica, Comercial, Marketing, Administración o Diseño. Disponibilidad de 25 a 30 horas semanales. Proactividad, pensamiento analítico, iniciativa propia y alto interés en aprender e innovar.",
+            evaluation_criteria=[
+                {"nombre": "Afinidad Disciplinaria y Fundamentos Técnicos / Profesionales", "peso": 0.35},
+                {"nombre": "Proactividad, Proyectos Prácticos y Capacidad de Aprendizaje", "peso": 0.30},
+                {"nombre": "Pensamiento Lógico, Organización y Habilidades de Comunicación", "peso": 0.20},
+                {"nombre": "Actitud de Servicio, Flexibilidad y Motivación por la Innovación", "peso": 0.15}
+            ],
+            status="abierta",
+            min_age=19,
+            max_age=29
+        )
+        db.add_all([v1, v2, v3])
         db.commit()
-        seeded_vacancies = 2
+        seeded_vacancies = 3
 
     logger.info(f"Purga completa del ecosistema completada. Vacantes purgadas: {vacancies_count}, vacantes sembradas: {seeded_vacancies}.")
     return {

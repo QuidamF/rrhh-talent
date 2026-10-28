@@ -57,11 +57,13 @@ class ScoringService:
             # Formatear la lista de criterios para el prompt
             criteria_list_str = ""
             for idx, c in enumerate(criteria):
-                criteria_list_str += f"- Criterio {idx + 1}: \"{c.get('criterio')}\" (Peso: {c.get('peso') * 100}%)\n"
+                c_lbl = c.get('criterio') or c.get('nombre') or f"Criterio {idx+1}"
+                c_w = float(c.get('peso', 0)) * 100
+                criteria_list_str += f"- Criterio {idx + 1}: \"{c_lbl}\" (Peso: {c_w:.0f}%)\n"
                 
             # 3. Construir Prompt Dinámico
             prompt = (
-                f"Eres un experto seleccionador de talento humano en el área de TI.\n"
+                f"Eres un experto seleccionador de talento humano y evaluación integral de perfiles profesionales.\n"
                 f"Tu tarea es evaluar el perfil de un candidato frente a los criterios específicos de una vacante.\n\n"
                 f"=== DATOS DE LA VACANTE ===\n"
                 f"Título: {vacancy.title}\n"
@@ -106,7 +108,7 @@ class ScoringService:
             evaluated_details = []
             
             for index, vc in enumerate(criteria):
-                c_name = vc.get("criterio", "")
+                c_name = vc.get("criterio") or vc.get("nombre") or ""
                 c_weight = vc.get("peso", 0.0)
                 
                 matched_score = 0.0
