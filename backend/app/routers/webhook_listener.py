@@ -413,6 +413,10 @@ async def webhook_inbound(
     db: Session = Depends(get_db)
 ):
     """Processes normalized inbound messages from the Webhook gateway."""
+    # Desempaquetar si el payload viene envuelto por frontend_dispatcher_worker ({"event": "...", "data": {...}})
+    if isinstance(payload, dict) and "data" in payload and isinstance(payload["data"], dict):
+        payload = payload["data"]
+
     channel = payload.get("channel")
     actor_id = payload.get("actor_id")
     content = payload.get("content", {})
@@ -429,65 +433,78 @@ async def webhook_inbound(
     is_start = body.startswith("/start")
     is_restart = body == "/restart"
     
-    if is_start and "app_" in body:
-        # Extract application_id
-        application_id = body.replace("/start app_", "").strip()
-        print(f"DEBUG: Procesando /start con app_{application_id}", flush=True)
-        application = db.query(models.Application).filter(models.Application.id == application_id).first()
-        
-        if application:
-            candidate = application.candidate
-            # Bind Telegram chat ID to candidate
-            candidate.telegram_chat_id = actor_id
-            db.commit()
+    if is_start:
+        if "app_" in body:
+            # Extract application_id
+            application_id = body.replace("/start app_", "").strip()
+            print(f"DEBUG: Procesando /start con app_{application_id}", flush=True)
+            application = db.query(models.Application).filter(models.Application.id == application_id).first()
             
-            print(f"DEBUG: Asociado candidato {candidate.name} con telegram_chat_id {actor_id}", flush=True)
-            
-            # Wipe any previous ChatMessage logs to allow a fresh start
-            db.query(models.ChatMessage).filter(models.ChatMessage.candidate_id == candidate.id).delete()
-            db.commit()
+            if application:
+                candidate = application.candidate
+                # Bind Telegram chat ID to candidate
+                candidate.telegram_chat_id = actor_id
+                db.commit()
+                
+                print(f"DEBUG: Asociado candidato {candidate.name} con telegram_chat_id {actor_id}", flush=True)
+                
+                # Wipe any previous ChatMessage logs to allow a fresh start
+                db.query(models.ChatMessage).filter(models.ChatMessage.candidate_id == candidate.id).delete()
+                db.commit()
 
-            # Obtener nombre del bot y aviso de privacidad configurado
-            bot_name_s = db.query(models.Setting).filter(models.Setting.key == "bot_name").first()
-            bot_name = bot_name_s.value if bot_name_s else "OctyBot"
+                # Obtener nombre del bot y aviso de privacidad configurado
+                bot_name_s = db.query(models.Setting).filter(models.Setting.key == "bot_name").first()
+                bot_name = bot_name_s.value if bot_name_s else "OctyBot"
 
-            privacy_s = db.query(models.Setting).filter(models.Setting.key == "privacy_notice").first()
-            privacy_text = privacy_s.value if privacy_s else (
-                "🔒 **Aviso de Privacidad y Tratamiento de Datos**:\n"
-                "En Octopy Talento protegemos tus datos conforme a la legislación aplicable. "
-                "La información y respuestas que compartas serán tratadas de forma estrictamente confidencial "
-                "por Recursos Humanos exclusivamente para la evaluación de tu postulación. "
-                "Al continuar con esta conversación, confirmas tu conformidad para el tratamiento de tus datos para dichos fines."
-            )
+                privacy_s = db.query(models.Setting).filter(models.Setting.key == "privacy_notice").first()
+                privacy_text = privacy_s.value if privacy_s else (
+                    "🔒 **Aviso de Privacidad y Tratamiento de Datos**:\n"
+                    "En Octopy Talento protegemos tus datos conforme a la legislación aplicable. "
+                    "La información y respuestas que compartas serán tratadas de forma estrictamente confidencial "
+                    "por Recursos Humanos exclusivamente para la evaluación de tu postulación. "
+                    "Al continuar con esta conversación, confirmas tu conformidad para el tratamiento de tus datos para dichos fines."
+                )
 
-            # Welcome message con Aviso de Privacidad Formal (Paso 1 y Paso 2) y primera pregunta (Paso 3)
-            welcome_text = (
-                f"¡Hola, {candidate.name}! Qué gusto saludarte. 👋\n\n"
-                f"Soy {bot_name}, el asistente virtual de Selección de Talento en Octopy (octopy.com). "
-                f"Te doy la bienvenida a tu proceso para la vacante de **{application.vacancy.title}**.\n\n"
-                f"{privacy_text}\n\n"
-                f"Para comenzar con tu pre-entrevista de filtro inicial, cuéntame un poco: "
-                f"¿qué fue lo que más te motivó a postularte a esta vacante y qué experiencia tienes en el área comercial, técnica o de atención a clientes?"
-            )
-            
-            # Record outbound in SQLite ChatMessage
-            db_out = models.ChatMessage(
-                candidate_id=candidate.id,
-                direction="outbound",
-                body=welcome_text
-            )
-            db.add(db_out)
-            db.commit()
-            
-            print("DEBUG: Despachando mensaje de bienvenida inicial...", flush=True)
-            background_tasks.add_task(send_outbound_message, actor_id, channel, welcome_text)
-            return {"status": "welcomed", "candidate_id": candidate.id}
-            
+                # Welcome message con Aviso de Privacidad Formal (Paso 1 y Paso 2) y primera pregunta (Paso 3)
+                welcome_text = (
+                    f"¡Hola, {candidate.name}! Qué gusto saludarte. 👋\n\n"
+                    f"Soy {bot_name}, el asistente virtual de Selección de Talento en Octopy (octopy.com). "
+                    f"Te doy la bienvenida a tu proceso para la vacante de **{application.vacancy.title}**.\n\n"
+                    f"{privacy_text}\n\n"
+                    f"Para comenzar con tu pre-entrevista de filtro inicial, cuéntame un poco: "
+                    f"¿qué fue lo que más te motivó a postularte a esta vacante y qué experiencia tienes en el área comercial, técnica o de atención a clientes?"
+                )
+                
+                # Record outbound in SQLite ChatMessage
+                db_out = models.ChatMessage(
+                    candidate_id=candidate.id,
+                    direction="outbound",
+                    body=welcome_text
+                )
+                db.add(db_out)
+                db.commit()
+                
+                print("DEBUG: Despachando mensaje de bienvenida inicial...", flush=True)
+                background_tasks.add_task(send_outbound_message, actor_id, channel, welcome_text)
+                return {"status": "welcomed", "candidate_id": candidate.id}
+                
+            else:
+                print("DEBUG: Application no encontrada. Fallback bienvenida genérica.", flush=True)
+                fallback = "¡Hola! Qué gusto saludarte. 👋 Soy OctyBot, el asistente de Talento en Octopy. Para iniciar tu proceso, compárteme tu nombre completo por favor."
+                background_tasks.add_task(send_outbound_message, actor_id, channel, fallback)
+                return {"status": "fallback_started"}
         else:
-            print("DEBUG: Application no encontrada. Fallback bienvenida genérica.", flush=True)
-            fallback = "¡Hola! Qué gusto saludarte. 👋 Soy OctyBot, el asistente de Talento en Octopy. Para iniciar tu proceso, compárteme tu nombre completo por favor."
-            background_tasks.add_task(send_outbound_message, actor_id, channel, fallback)
-            return {"status": "fallback_started"}
+            # /start directo sin enlace deep-link de postulación
+            candidate = db.query(models.Candidate).filter(models.Candidate.telegram_chat_id == actor_id).first()
+            if candidate:
+                welcome_text = f"¡Hola de nuevo, {candidate.name}! 👋 Soy OctyBot, tu asistente de Talento en Octopy. ¿En qué puedo apoyarte hoy con tu proceso?"
+            else:
+                welcome_text = (
+                    "¡Hola! Qué gusto saludarte. 👋 Soy OctyBot, el asistente virtual de Recursos Humanos en Octopy (octopy.com).\n\n"
+                    "Si te postulaste a una vacante, puedes abrir el enlace de Telegram directo de tu postulación para vincular tu expediente, o bien compárteme tu nombre completo para buscarte."
+                )
+            background_tasks.add_task(send_outbound_message, actor_id, channel, welcome_text)
+            return {"status": "start_greeted"}
 
     # --- GENERAL CONVERSATIONAL MESSAGES ---
     # Find candidate mapped to this chat ID
