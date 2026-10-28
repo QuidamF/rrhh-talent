@@ -168,62 +168,74 @@ async def health_database(db: Session = Depends(get_db)):
 @app.get("/health/ollama")
 async def health_ollama():
     """
-    Comprobación de salud de Ollama y el modelo Gemma.
-    1. Verifica comunicación con Ollama.
-    2. Comprueba que Ollama responda correctamente.
-    3. Verifica si el modelo configurado (gemma4:4b) está instalado.
+    Comprobación de salud del motor de Inteligencia Artificial (OpenAI, Gemini u Ollama).
+    Detecta automáticamente el proveedor activo y no lanza 500 si Ollama no está en el VPS.
     """
+    provider = (settings.llm_provider or "ollama").lower().strip()
+    
+    # 1. Proveedor OpenAI
+    if provider == "openai":
+        has_key = bool(settings.openai_api_key and not settings.openai_api_key.startswith("your_"))
+        model = settings.openai_model or "gpt-4o-mini"
+        return {
+            "status": "healthy" if has_key else "warning",
+            "provider": "openai",
+            "model_installed": has_key,
+            "ollama_available": has_key,
+            "model": model,
+            "message": f"Motor IA OpenAI activo usando modelo '{model}'." if has_key else "OpenAI seleccionado pero falta configurar OPENAI_API_KEY."
+        }
+
+    # 2. Proveedor Gemini
+    if provider == "gemini":
+        has_key = bool(settings.gemini_api_key and not settings.gemini_api_key.startswith("your_"))
+        model = settings.gemini_model or "gemini-2.5-flash"
+        return {
+            "status": "healthy" if has_key else "warning",
+            "provider": "gemini",
+            "model_installed": has_key,
+            "ollama_available": has_key,
+            "model": model,
+            "message": f"Motor IA Google Gemini activo usando modelo '{model}'." if has_key else "Gemini seleccionado pero falta configurar GEMINI_API_KEY."
+        }
+
+    # 3. Proveedor Ollama (Local)
     url = f"{settings.ollama_base_url.rstrip('/')}/api/tags"
     target_model = settings.ollama_model
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=4.0) as client:
             response = await client.get(url, headers={"ngrok-skip-browser-warning": "true"})
             
             if response.status_code != 200:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"Ollama respondió con estado {response.status_code}"
-                )
+                return {
+                    "status": "warning",
+                    "ollama_available": False,
+                    "model_installed": False,
+                    "message": f"Ollama respondió con código {response.status_code}"
+                }
                 
             data = response.json()
             models = data.get("models", [])
             installed_models = [m.get("name") for m in models]
             
-            # Buscar coincidencia exacta o coincidencia de tag (ej. gemma4:4b vs gemma4:4b-latest)
-            model_installed = False
-            for model_name in installed_models:
-                if target_model in model_name or model_name in target_model:
-                    model_installed = True
-                    break
+            model_installed = any(target_model in m or m in target_model for m in installed_models)
             
-            if not model_installed:
-                return {
-                    "status": "warning",
-                    "ollama_available": True,
-                    "model_installed": False,
-                    "message": f"Ollama está activo, pero el modelo '{target_model}' no está descargado.",
-                    "installed_models": installed_models
-                }
-                
             return {
-                "status": "healthy",
+                "status": "healthy" if model_installed else "warning",
                 "ollama_available": True,
-                "model_installed": True,
+                "model_installed": model_installed,
                 "model": target_model,
-                "message": f"Conexión exitosa con Ollama. Modelo '{target_model}' listo para usar."
+                "message": f"Conexión exitosa con Ollama. Modelo '{target_model}' listo." if model_installed else f"Ollama activo pero falta el modelo '{target_model}'."
             }
-
-    except httpx.ConnectError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"No se pudo conectar con Ollama en {settings.ollama_base_url}. Verifique que el servicio esté activo en el Host y escuche en 0.0.0.0."
-        )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error inesperado al conectar con Ollama: {str(e)}"
-        )
+        return {
+            "status": "warning",
+            "ollama_available": False,
+            "model_installed": False,
+            "message": f"Ollama local no disponible en {settings.ollama_base_url}"
+        }
+
 
 class TestInferenceRequest(BaseModel):
     prompt: str
