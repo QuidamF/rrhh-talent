@@ -5,8 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: rh_backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8002}:8000"
     volumes:
+
 
       - ./backend:/app
       - rh_data:/app/data
@@ -36,8 +37,9 @@ services:
       - ENFORCE_SIGNED_URLS=${ENFORCE_SIGNED_URLS:-false}
       - ENABLE_AT_REST_ENCRYPTION=${ENABLE_AT_REST_ENCRYPTION:-true}
       - ID_DOCUMENT_RETENTION_HOURS=${ID_DOCUMENT_RETENTION_HOURS:-24}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
-      - FRONTEND_PORT=${FRONTEND_PORT:-5173}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5002,http://127.0.0.1:5002,http://localhost:5173,https://talento.majen.tech}
+      - FRONTEND_PORT=${FRONTEND_PORT:-5002}
+
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -51,15 +53,16 @@ services:
       dockerfile: Dockerfile
     container_name: rh_frontend
     ports:
-      - "${FRONTEND_PORT:-5173}:5173"
+      - "${FRONTEND_PORT:-5002}:5173"
     volumes:
 
       - ./frontend:/app
       - /app/node_modules
     environment:
       - VITE_API_URL=${VITE_API_URL:-}
-      - VITE_BACKEND_PORT=${BACKEND_PORT:-8001}
+      - VITE_BACKEND_PORT=${BACKEND_PORT:-8002}
       - VITE_HMR_CLIENT_PORT=${VITE_HMR_CLIENT_PORT:-}
+
 
     depends_on:
       - backend

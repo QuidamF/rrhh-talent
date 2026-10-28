@@ -67,7 +67,8 @@ const getApiUrl = () => {
     }
     return envUrl.replace(/\/+$/, '');
   }
-  const backendPort = (import.meta.env.VITE_BACKEND_PORT || '8001').trim();
+  const backendPort = (import.meta.env.VITE_BACKEND_PORT || '8002').trim();
+
   if (typeof window !== 'undefined' && window.location) {
     const protocol = window.location.protocol || 'http:';
     const hostname = window.location.hostname || 'localhost';
