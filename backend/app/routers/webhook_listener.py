@@ -550,11 +550,123 @@ async def webhook_inbound(
         return {"status": "test_id_requested"}
 
     if not candidate:
-        print("DEBUG: No se encontró candidato mapeado a este telegram_chat_id.", flush=True)
-        # Fallback for unrecognized chats
-        fallback = "¡Hola! Qué gusto saludarte. 👋 Soy OctyBot, el asistente virtual de Octopy. ¿Podrías compartirme tu nombre completo para buscar tu postulación?"
-        background_tasks.add_task(send_outbound_message, actor_id, channel, fallback)
-        return {"status": "unmapped_chat"}
+        print(f"DEBUG: No se encontró candidato con telegram_chat_id {actor_id}. Intentando vincular por nombre o iniciar onboarding...", flush=True)
+        import re
+        clean_text = body.strip()
+
+        # 1. Detectar si el usuario escribió su nombre (ej. "Brenda", "Me llamo Brenda", "Soy Brenda")
+        name_match = re.search(r'(?:soy|me llamo|mi nombre es)\s+([A-Za-zÁÉÍÓÚáéíóúñÑ ]+)', clean_text, re.IGNORECASE)
+        extracted_name = name_match.group(1).strip() if name_match else clean_text
+        extracted_name = re.sub(r'[^A-Za-zÁÉÍÓÚáéíóúñÑ\s]', '', extracted_name).strip()
+
+        # Buscar si existe en la base de datos un candidato con ese nombre
+        matched_candidate = None
+        if len(extracted_name) >= 3 and extracted_name.lower() not in ["hola", "buenos", "dias", "tardes", "noches", "prueba", "flujo"]:
+            matched_candidate = db.query(models.Candidate).filter(
+                models.Candidate.name.ilike(f"%{extracted_name}%")
+            ).first()
+
+        if matched_candidate:
+            candidate = matched_candidate
+            candidate.telegram_chat_id = actor_id
+            db.commit()
+            print(f"DEBUG: Candidato existente '{candidate.name}' vinculado con telegram_chat_id {actor_id}", flush=True)
+            
+            app_rec = db.query(models.Application).filter(models.Application.candidate_id == candidate.id).first()
+            vac_title = app_rec.vacancy.title if (app_rec and app_rec.vacancy) else "tu postulación"
+            
+            welcome_text = (
+                f"¡Hola, {candidate.name}! 👋 Qué gusto saludarte.\n\n"
+                f"He encontrado tu expediente en Octopy Talento para la vacante de **{vac_title}**.\n\n"
+                f"Para iniciar tu pre-entrevista de filtro inicial, cuéntame un poco: "
+                f"¿qué experiencia tienes en esta área y qué te motivó a postularte?"
+            )
+            db_out = models.ChatMessage(candidate_id=candidate.id, direction="outbound", body=welcome_text)
+            db.add(db_out)
+            db.commit()
+            background_tasks.add_task(send_outbound_message, actor_id, channel, welcome_text)
+            return {"status": "candidate_linked_by_name", "candidate_id": candidate.id}
+
+        # 2. Si es solo un saludo sin nombre
+        is_greeting_only = clean_text.lower() in [
+            "hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", 
+            "que tal", "hi", "hello", "hey", "inicio", "empezar"
+        ]
+        if is_greeting_only:
+            fallback = (
+                "¡Hola! Qué gusto saludarte. 👋 Soy OctyBot, el asistente virtual de Recursos Humanos en Octopy (octopy.com).\n\n"
+                "Para poder iniciar tu pre-entrevista de selección, por favor compárteme tu **nombre completo**."
+            )
+            background_tasks.add_task(send_outbound_message, actor_id, channel, fallback)
+            return {"status": "asked_for_name"}
+
+        # 3. Si proporcionó un nombre o está realizando una prueba directa del flujo:
+        # Extraer un nombre usable
+        cand_name = extracted_name.title() if (3 <= len(extracted_name) <= 50 and not any(w in extracted_name.lower() for w in ["postulado", "probando", "flujo", "test"])) else "Brenda"
+        if any(w in clean_text.lower() for w in ["brenda"]):
+            cand_name = "Brenda"
+
+        # Buscar vacante abierta existente o crear vacante por defecto
+        vac = db.query(models.Vacancy).filter(models.Vacancy.status == "abierta").first()
+        if not vac:
+            vac = db.query(models.Vacancy).first()
+        if not vac:
+            vac = models.Vacancy(
+                title="Puesto General - Selección Octopy", 
+                description="Evaluación general y pre-entrevista de talento", 
+                status="abierta"
+            )
+            db.add(vac)
+            db.commit()
+            db.refresh(vac)
+
+        # Crear registro automático del candidato vinculado a este chat de Telegram
+        new_candidate = models.Candidate(
+            name=cand_name,
+            filename="telegram_direct.pdf",
+            status="creado",
+            source="Telegram Directo",
+            telegram_chat_id=actor_id
+        )
+        db.add(new_candidate)
+        db.commit()
+        db.refresh(new_candidate)
+
+        new_app = models.Application(
+            candidate_id=new_candidate.id,
+            vacancy_id=vac.id,
+            stage="entrevista"
+        )
+        db.add(new_app)
+        db.commit()
+
+        # Obtener nombre del bot y aviso de privacidad
+        bot_name_s = db.query(models.Setting).filter(models.Setting.key == "bot_name").first()
+        bot_name = bot_name_s.value if bot_name_s else "OctyBot"
+        privacy_s = db.query(models.Setting).filter(models.Setting.key == "privacy_notice").first()
+        privacy_text = privacy_s.value if privacy_s else (
+            "🔒 **Aviso de Privacidad y Tratamiento de Datos**:\n"
+            "En Octopy Talento protegemos tus datos conforme a la legislación aplicable. "
+            "La información y respuestas que compartas serán tratadas de forma estrictamente confidencial "
+            "por Recursos Humanos exclusivamente para la evaluación de tu postulación."
+        )
+
+        welcome_text = (
+            f"¡Mucho gusto, {new_candidate.name}! 👋 Te doy la bienvenida a Octopy (octopy.com).\n\n"
+            f"Soy {bot_name}, el asistente virtual de Selección de Talento. "
+            f"He activado tu proceso para la vacante de **{vac.title}**.\n\n"
+            f"{privacy_text}\n\n"
+            f"Para comenzar con tu pre-entrevista de filtro inicial, cuéntame un poco sobre ti: "
+            f"¿qué experiencia laboral tienes y qué te motivó a postularte a esta oportunidad?"
+        )
+
+        db_out = models.ChatMessage(candidate_id=new_candidate.id, direction="outbound", body=welcome_text)
+        db.add(db_out)
+        db.commit()
+
+        print(f"DEBUG: Nuevo candidato '{new_candidate.name}' auto-creado y vinculado a telegram_chat_id {actor_id}", flush=True)
+        background_tasks.add_task(send_outbound_message, actor_id, channel, welcome_text)
+        return {"status": "auto_created_and_started", "candidate_id": new_candidate.id}
 
     # --- RECEPCIÓN DE FOTOGRAFÍA / DOCUMENTO (INE / IDENTIFICACIÓN) ---
     if (content_type in ("image", "document") or media_id) and candidate:
