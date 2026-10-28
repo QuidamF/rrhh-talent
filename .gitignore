@@ -1,0 +1,80 @@
+# ==============================================================================
+# SEGURIDAD Y DATOS SENSIBLES (PII, LFPDPPP)
+# ==============================================================================
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Archivos de candidatos, CVs reales y hojas de cálculo con PII
+CVs Demo/
+"CVs Demo/"
+*.csv
+*.xlsx
+*.xls
+*.pdf
+
+# Base de datos local y almacenamiento de archivos
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+data/
+storage/
+**/data/
+**/storage/
+backend/data/
+backend/storage/
+
+# ==============================================================================
+# SUBMÓDULOS / REPOSITORIOS EXTERNOS
+# ==============================================================================
+wbhookOmnicanal/
+
+# ==============================================================================
+# PYTHON & BACKEND
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+backend/__pycache__/
+backend/app/__pycache__/
+
+# ==============================================================================
+# NODE / REACT / FRONTEND
+# ==============================================================================
+node_modules/
+**/node_modules/
+dist/
+frontend/dist/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ==============================================================================
+# IDEs, EDITORES Y SISTEMA OPERATIVO
+# ==============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

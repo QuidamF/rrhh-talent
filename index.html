@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalentExtract Pro - Lector y Extractor de CVs</title>
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Estilos Personalizados -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-icon">
+                    <i data-lucide="file-text"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>TalentExtract <span class="accent-text">Pro</span></h1>
+                    <p>Extractor inteligente de CVs y PDFs en tiempo real</p>
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="stat-badge">
+                    <span class="stat-value" id="stats-total">0</span>
+                    <span class="stat-label">Candidatos</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="app-main">
+            <!-- SECCIÓN DE CARGA -->
+            <section class="upload-section card">
+                <div class="drop-zone" id="drop-zone">
+                    <input type="file" id="file-input" multiple accept=".pdf" class="file-input">
+                    <div class="drop-zone-content">
+                        <div class="upload-icon-wrapper">
+                            <i data-lucide="upload-cloud" class="upload-icon"></i>
+                        </div>
+                        <h3>Arrastra tus CVs en formato PDF aquí</h3>
+                        <p>o haz clic para explorar tus archivos</p>
+                        <span class="file-limits">Soporta múltiples archivos PDF simultáneamente</span>
+                    </div>
+                </div>
+
+                <!-- Cola de procesamiento -->
+                <div class="processing-queue-container hidden" id="queue-container">
+                    <h4 class="section-subtitle">Progreso de Carga</h4>
+                    <div class="processing-queue" id="processing-queue">
+                        <!-- Items de carga dinámica se insertan aquí -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECCIÓN DE RESULTADOS -->
+            <section class="results-section card">
+                <div class="results-toolbar">
+                    <div class="search-bar">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" id="search-input" placeholder="Buscar por nombre, correo o habilidades...">
+                    </div>
+                    <div class="toolbar-actions">
+                        <button class="btn btn-secondary" id="clear-btn" title="Limpiar lista">
+                            <i data-lucide="trash-2"></i> Limpiar Todo
+                        </button>
+                        <button class="btn btn-primary" id="export-btn" disabled>
+                            <i data-lucide="download"></i> Exportar a CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- TABLA DE CANDIDATOS -->
+                <div class="table-container">
+                    <table class="candidates-table" id="candidates-table">
+                        <thead>
+                            <tr>
+                                <th>Candidato</th>
+                                <th>Correo Electrónico</th>
+                                <th>Teléfono</th>
+                                <th>Habilidades Clave</th>
+                                <th>Archivo Fuente</th>
+                                <th class="actions-col">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="candidates-body">
+                            <!-- Filas vacías por defecto o generadas dinámicamente -->
+                            <tr class="empty-state-row" id="empty-state">
+                                <td colspan="6">
+                                    <div class="empty-state">
+                                        <i data-lucide="users-2" class="empty-state-icon"></i>
+                                        <h4>No hay candidatos procesados</h4>
+                                        <p>Arrastra archivos PDF en la zona superior para comenzar la extracción de datos automáticamente.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="app-footer">
+            <p>&copy; 2026 TalentExtract Pro | Procesamiento local 100% seguro (tus datos no salen de tu navegador).</p>
+        </footer>
+    </div>
+
+    <!-- MODAL DE VISTA PREVIA DE TEXTO -->
+    <div class="modal" id="text-modal">
+        <div class="modal-content card">
+            <div class="modal-header">
+                <div class="modal-title-wrapper">
+                    <i data-lucide="eye" class="modal-icon"></i>
+                    <h3 id="modal-title">Texto Extraído del CV</h3>
+                </div>
+                <button class="close-modal" id="close-modal-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre class="extracted-text-view" id="extracted-text-view"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="close-modal-footer-btn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Lógica de la Aplicación (con Cache Buster para entorno local) -->
+    <script>
+        const script = document.createElement('script');
+        script.src = 'app.js?v=' + Date.now();
+        document.body.appendChild(script);
+    </script>
+    <script>
+        // Inicializar iconos de Lucide
+        lucide.createIcons();
+    </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rh_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - rh_data:/app/data
+      - rh_storage:/app/storage
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:4b}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/rh.sqlite}
+      - STORAGE_PATH=${STORAGE_PATH:-/app/storage/candidates}
+      - MAX_CV_SIZE_MB=${MAX_CV_SIZE_MB:-10}
+      - REDIS_URL=redis://rh_redis:6379/0
+      - WEBHOOK_SEND_URL=${WEBHOOK_SEND_URL:-http://host.docker.internal:5000/messages/send}
+      - WEBHOOK_API_KEY=${WEBHOOK_API_KEY:-your_secret_api_key_here}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+
+
+      - SECURITY_SECRET_KEY=${SECURITY_SECRET_KEY:-rh-secure-token-secret-key-change-in-production-32b}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-rh-admin-secret-api-key-2026}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - ENFORCE_SIGNED_URLS=${ENFORCE_SIGNED_URLS:-false}
+      - ENABLE_AT_REST_ENCRYPTION=${ENABLE_AT_REST_ENCRYPTION:-true}
+      - ID_DOCUMENT_RETENTION_HOURS=${ID_DOCUMENT_RETENTION_HOURS:-24}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - rh_redis
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rh_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-}
+      - VITE_HMR_CLIENT_PORT=${VITE_HMR_CLIENT_PORT:-}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  rh_redis:
+    image: redis:alpine
+    container_name: rh_redis
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rh_worker
+    command: python app/worker.py
+    volumes:
+      - ./backend:/app
+      - rh_data:/app/data
+      - rh_storage:/app/storage
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:4b}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/rh.sqlite}
+      - STORAGE_PATH=${STORAGE_PATH:-/app/storage/candidates}
+      - REDIS_URL=redis://rh_redis:6379/0
+      - WEBHOOK_SEND_URL=${WEBHOOK_SEND_URL:-http://host.docker.internal:5000/messages/send}
+      - WEBHOOK_API_KEY=${WEBHOOK_API_KEY:-your_secret_api_key_here}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+
+      - SECURITY_SECRET_KEY=${SECURITY_SECRET_KEY:-rh-secure-token-secret-key-change-in-production-32b}
+
+      - ENABLE_AT_REST_ENCRYPTION=${ENABLE_AT_REST_ENCRYPTION:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - rh_redis
+    restart: unless-stopped
+
+volumes:
+  rh_data:
+    driver: local
+  rh_storage:
+    driver: local
