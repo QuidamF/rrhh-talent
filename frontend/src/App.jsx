@@ -1862,23 +1862,8 @@ function App() {
     fetchMaintenanceStats();
   }, []);
 
-  // Polling automático inteligente: cuando hay candidatos extrayéndose O evaluaciones de IA pendientes de score
-  useEffect(() => {
-    const hasPendingExtraction = candidates.some(c => c.status === 'procesando');
-    const hasPendingEvaluation = candidates.some(c => 
-      c.applications && c.applications.length > 0 && c.applications.some(a => a.score === null || a.score === undefined)
-    );
-
-    if (!hasPendingExtraction && !hasPendingEvaluation) return;
-
-    const interval = setInterval(() => {
-      fetchCandidates(true); // Consultar en segundo plano silenciosamente
-      fetchVacancies(true);
-      fetchStats(true);
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [candidates]);
+  // Desactivado: El polling continuo cada 3s provocaba re-renderizados constantes e innecesarios de la interfaz
+  // La actualización de candidatos y vacantes se ejecuta bajo demanda (al subir CVs, editar o refrescar)
 
   // Si se abre el modal de detalle, cargar sus postulaciones una sola vez (sin polling persistente)
   useEffect(() => {

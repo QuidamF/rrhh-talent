@@ -19,10 +19,8 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 5173,
       allowedHosts: true, // Permite cualquier dominio/host asignado como rh.grupojpm.mx
-      hmr: hmrConfig,
-      watch: {
-        usePolling: true // Habilita la detección de cambios dentro de volúmenes Docker en Windows
-      }
+      hmr: hmrConfig
     }
   }
+
 })
