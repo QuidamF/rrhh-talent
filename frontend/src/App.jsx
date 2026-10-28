@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Activity, 
   Database, 
@@ -1504,10 +1504,27 @@ function App() {
         method: 'POST'
       });
       if (res.ok) {
-        alert("¡Candidato postulado con éxito! La IA ha comenzado la evaluación.");
+        const targetCandId = selectedCandidateForApply;
+        const targetVac = activeVacancyForApply;
         setActiveVacancyForApply(null);
         setSelectedCandidateForApply('');
-        fetchVacancies();
+        
+        // Optimistic update para activar de inmediato el preloader y el auto-polling
+        setCandidates(prev => prev.map(c => {
+          if (c.id === targetCandId) {
+            const tempApp = {
+              id: Date.now(),
+              vacancy_id: targetVac.id,
+              vacancy: targetVac,
+              score: null,
+              stage: 'cv_recibido'
+            };
+            return { ...c, applications: [tempApp, ...(c.applications || [])] };
+          }
+          return c;
+        }));
+        
+        fetchVacancies(true);
         fetchCandidates(true);
       } else {
         const err = await res.json();
@@ -1616,16 +1633,21 @@ function App() {
       });
 
       if (res.ok) {
-        alert("¡Candidato postulado con éxito!");
+        const appliedApp = await res.json();
         setDirectApplyModalOpen(false);
+        const targetVacId = targetVacancyForDirectApply;
         setTargetVacancyForDirectApply('');
-        if (selectedCandidate?.id) {
-          const appRes = await fetch(`${API_URL}/candidates/${selectedCandidate.id}/applications`);
-          if (appRes.ok) {
-            const data = await appRes.json();
-            setSelectedCandidateApplications(data);
+        
+        // Optimistic update para activar preloader y auto-polling
+        const pendingApp = { ...appliedApp, score: null };
+        setSelectedCandidateApplications(prev => [pendingApp, ...(prev || [])]);
+        setCandidates(prev => prev.map(c => {
+          if (c.id === selectedCandidate.id) {
+            return { ...c, applications: [pendingApp, ...(c.applications || [])] };
           }
-        }
+          return c;
+        }));
+        
         fetchCandidates(true);
         fetchVacancies(true);
         fetchStats(true);
@@ -1865,10 +1887,40 @@ function App() {
     fetchMaintenanceStats();
   }, []);
 
-  // Desactivado: El polling continuo cada 3s provocaba re-renderizados constantes e innecesarios de la interfaz
-  // La actualización de candidatos y vacantes se ejecuta bajo demanda (al subir CVs, editar o refrescar)
+  // Polling dinámico inteligente (Transient Auto-Polling):
+  // Se activa ÚNICAMENTE mientras hay candidatos en 'procesando' o postulaciones con score calculándose (score === null).
+  // En cuanto OpenAI termina la inferencia, el polling se detiene automáticamente. Cero re-renders ociosos.
+  const hasPendingAiTask = useMemo(() => {
+    return candidates.some(c => 
+      c.status === 'procesando' || 
+      (c.applications && c.applications.some(a => a.score === null))
+    );
+  }, [candidates]);
 
-  // Si se abre el modal de detalle, cargar sus postulaciones una sola vez (sin polling persistente)
+  useEffect(() => {
+    if (!hasPendingAiTask) return;
+
+    // Actualiza silenciosamente cada 2.5s hasta que la IA termine
+    const timer = setInterval(() => {
+      fetchCandidates(true);
+      fetchVacancies(true);
+      fetchStats(true);
+      
+      // Si el modal de detalle está abierto, refrescar también sus postulaciones
+      if (selectedCandidate?.id) {
+        fetch(`${API_URL}/candidates/${selectedCandidate.id}/applications`)
+          .then(r => r.ok ? r.json() : [])
+          .then(data => {
+            if (data && data.length > 0) setSelectedCandidateApplications(data);
+          })
+          .catch(() => {});
+      }
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [hasPendingAiTask, selectedCandidate?.id]);
+
+  // Si se abre el modal de detalle, cargar sus postulaciones una sola vez
   useEffect(() => {
     if (!selectedCandidate?.id) return;
     setPdfZoom(100);
@@ -1892,19 +1944,10 @@ function App() {
     
     loadExtraData();
 
-    // Solo activar polling temporal si el candidato está en estado 'procesando'
-    let interval = null;
-    if (selectedCandidate.status === 'procesando') {
-      interval = setInterval(() => {
-        loadExtraData();
-      }, 5000);
-    }
-
     return () => {
       isSubscribed = false;
-      if (interval) clearInterval(interval);
     };
-  }, [selectedCandidate?.id, selectedCandidate?.status]);
+  }, [selectedCandidate?.id]);
 
   const handleFileUpload = (filesList) => {
     const pdfs = Array.from(filesList).filter(f => f.type === 'application/pdf');
@@ -1953,19 +1996,29 @@ function App() {
 
         if (res.ok) {
           const candidateData = await res.json();
+          let createdCandidate = { ...candidateData, status: 'procesando' };
           
           // Si seleccionó una vacante, postular de inmediato
           if (vacancyId) {
             setUploadingFiles(prev => prev.map(u => u.name === file.name ? { ...u, progress: 80, status: 'procesando' } : u));
-            await fetch(`${API_URL}/vacancies/${vacancyId}/apply/${candidateData.id}`, {
-              method: 'POST'
-            });
+            try {
+              const applyRes = await fetch(`${API_URL}/vacancies/${vacancyId}/apply/${candidateData.id}`, {
+                method: 'POST'
+              });
+              if (applyRes.ok) {
+                const appData = await applyRes.json();
+                createdCandidate.applications = [{ ...appData, score: null }];
+              }
+            } catch (err) {
+              console.error("Error al postular de inmediato:", err);
+            }
           }
 
+          setCandidates(prev => [createdCandidate, ...prev.filter(c => c.id !== candidateData.id)]);
           setUploadingFiles(prev => prev.filter(u => u.name !== file.name));
-          fetchCandidates(true); // Refrescar lista de candidatos
+          fetchCandidates(true);
           fetchVacancies(true);
-          fetchCandidateSources(); // Actualizar lista de fuentes
+          fetchCandidateSources();
         } else {
           const errData = await res.json();
           setUploadingFiles(prev => prev.map(u => u.name === file.name ? { ...u, status: 'error', progress: 0, error: errData.detail || 'Fallo de subida' } : u));
@@ -2008,12 +2061,22 @@ function App() {
 
         if (res.ok) {
           const candidateData = await res.json();
+          let createdCandidate = { ...candidateData, status: 'procesando' };
           
           setUploadingFiles(prev => prev.map(u => u.name === file.name ? { ...u, progress: 80, status: 'procesando' } : u));
-          await fetch(`${API_URL}/vacancies/${vacancyId}/apply/${candidateData.id}`, {
-            method: 'POST'
-          });
+          try {
+            const applyRes = await fetch(`${API_URL}/vacancies/${vacancyId}/apply/${candidateData.id}`, {
+              method: 'POST'
+            });
+            if (applyRes.ok) {
+              const appData = await applyRes.json();
+              createdCandidate.applications = [{ ...appData, score: null }];
+            }
+          } catch (err) {
+            console.error("Error al postular en vacante:", err);
+          }
 
+          setCandidates(prev => [createdCandidate, ...prev.filter(c => c.id !== candidateData.id)]);
           setUploadingFiles(prev => prev.filter(u => u.name !== file.name));
           fetchCandidates(true);
           fetchVacancies(true);
@@ -3493,6 +3556,55 @@ ${interviewLink}
                         {upFile.error && <span className="error-message">{upFile.error}</span>}
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* BANNER PRELOADER ACTIVO DE PROCESAMIENTO CON IA */}
+              {hasPendingAiTask && (
+                <div className="ai-processing-banner" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.8) 0%, rgba(59, 7, 100, 0.8) 100%)',
+                  border: '1px solid rgba(168, 85, 247, 0.45)',
+                  boxShadow: '0 4px 20px rgba(168, 85, 247, 0.2)',
+                  borderRadius: '12px',
+                  padding: '0.9rem 1.25rem',
+                  marginBottom: '1.25rem',
+                  gap: '1rem',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                    <div style={{
+                      background: 'rgba(168, 85, 247, 0.25)',
+                      border: '1px solid rgba(168, 85, 247, 0.4)',
+                      borderRadius: '10px',
+                      padding: '0.6rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <RefreshCw className="icon-spin" style={{ color: '#c084fc', width: '22px', height: '22px' }} />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: '0.95rem', color: '#fff', letterSpacing: '-0.01em' }}>
+                          Análisis de Perfiles con Inteligencia Artificial en Curso
+                        </strong>
+                        <span style={{ fontSize: '0.7rem', background: '#9333ea', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: '700' }}>
+                          OpenAI GPT-4o-mini
+                        </span>
+                      </div>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: '#cbd5e1' }}>
+                        La IA está analizando el CV, extrayendo habilidades técnicas y evaluando la compatibilidad con los criterios de la vacante. Los resultados se actualizarán automáticamente en pantalla.
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="badge badge-warning" style={{ fontSize: '0.75rem', fontWeight: '700', padding: '0.35rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <RefreshCw className="icon-spin icon-xs" /> Analizando en vivo...
+                    </span>
                   </div>
                 </div>
               )}
